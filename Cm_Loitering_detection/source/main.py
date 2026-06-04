@@ -1,9 +1,15 @@
 import cv2
 import os
+import sys
 import time
 import numpy as np
-from ultralytics import YOLO
 from loit_detect import LoiteringDetector
+
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if REPO_ROOT not in sys.path:
+    sys.path.append(REPO_ROOT)
+
+from danger_zone_monitor.person_tracker import PersonTracker
 
 # ==========================================
 # CREATE OUTPUT FOLDERS
@@ -71,7 +77,7 @@ def draw_box(event, x, y, flags, param):
 # ==========================================
 
 log_message("[MODEL] Loading YOLOv8 TensorRT engine model...")
-model = YOLO("models/yolov8n.engine")
+model = PersonTracker("models/yolov8n.engine", async_inference=True)
 log_message("[MODEL] Model loaded successfully")
 
 # ==========================================
@@ -316,35 +322,22 @@ while True:
     # YOLO TRACKING
     # ======================================
 
-    results = model.track(
-        frame,
-        persist=True,
-        tracker="bytetrack.yaml",
-        classes=[0],
-        verbose=False
-    )
-
     tracks = []
 
-    if results[0].boxes.id is not None:
+    for person in model.track(frame):
 
-        boxes = results[0].boxes.xyxy.cpu().numpy()
-        ids = results[0].boxes.id.cpu().numpy()
+        x1, y1, x2, y2 = map(int, person.bbox)
+        track_id = int(person.track_id)
 
-        for box, track_id in zip(boxes, ids):
-
-            x1, y1, x2, y2 = map(int, box)
-            track_id = int(track_id)
-
-            tracks.append({
-                "track_id": track_id,
-                "bbox": [x1, y1, x2, y2]
-            })
-            
-            # Track people
-            if track_id not in tracked_people:
-                tracked_people[track_id] = current_time
-                log_message(f"[DETECT] New person detected - ID: {track_id}")
+        tracks.append({
+            "track_id": track_id,
+            "bbox": [x1, y1, x2, y2]
+        })
+        
+        # Track people
+        if track_id not in tracked_people:
+            tracked_people[track_id] = current_time
+            log_message(f"[DETECT] New person detected - ID: {track_id}")
 
     # ======================================
     # LOITERING PROCESS
@@ -496,6 +489,7 @@ while True:
 # ==========================================
 
 log_message("[CLEANUP] Closing video writer...")
+model.close()
 cap.release()
 
 # Properly flush and release video writer

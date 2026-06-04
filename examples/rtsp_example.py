@@ -17,7 +17,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def run_monitor(rtsp_url: str, model_path: str, zone_file: str, fallback_fps: float, retry_interval: int):
+def run_monitor(
+    rtsp_url: str,
+    model_path: str,
+    zone_file: str,
+    fallback_fps: float,
+    retry_interval: int,
+    async_inference: bool,
+):
     """Runs the danger zone monitor on an RTSP stream with robust auto-reconnection.
     
     Args:
@@ -51,7 +58,8 @@ def run_monitor(rtsp_url: str, model_path: str, zone_file: str, fallback_fps: fl
             monitor = DangerZoneMonitor(
                 model_path=model_path,
                 zone_file=zone_file,
-                fps=fps
+                fps=fps,
+                async_inference=async_inference
             )
         else:
             # Update target FPS in the existing intrusion manager in case camera properties changed
@@ -81,6 +89,8 @@ def run_monitor(rtsp_url: str, model_path: str, zone_file: str, fallback_fps: fl
                 key = cv2.waitKey(1) & 0xFF
                 if key in [ord('q'), 27]:
                     logger.info("User exited program.")
+                    if monitor is not None:
+                        monitor.close()
                     cap.release()
                     cv2.destroyAllWindows()
                     return
@@ -100,6 +110,7 @@ def main():
     parser.add_argument("--config", type=str, default="config/zones.json", help="Path to zones JSON configuration")
     parser.add_argument("--fps", type=float, default=25.0, help="Fallback FPS if stream doesn't expose FPS metadata")
     parser.add_argument("--retry", type=int, default=5, help="Seconds to wait before reconnecting after a disconnect")
+    parser.add_argument("--sync-inference", action="store_true", help="Disable threaded TensorRT inference")
     args = parser.parse_args()
 
     run_monitor(
@@ -107,7 +118,8 @@ def main():
         model_path=args.model,
         zone_file=args.config,
         fallback_fps=args.fps,
-        retry_interval=args.retry
+        retry_interval=args.retry,
+        async_inference=not args.sync_inference
     )
 
 if __name__ == "__main__":

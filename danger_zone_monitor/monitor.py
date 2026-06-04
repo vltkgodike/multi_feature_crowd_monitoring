@@ -26,7 +26,8 @@ class DangerZoneMonitor:
         log_file: str = "logs/intrusion_log.csv",
         fps: float = 30.0,
         loitering_threshold: float = LOITERING_THRESHOLD_SEC,
-        loitering_alert_cooldown: float = LOITERING_ALERT_COOLDOWN_SEC
+        loitering_alert_cooldown: float = LOITERING_ALERT_COOLDOWN_SEC,
+        async_inference: bool = True
     ):
         """Initializes the danger zone monitor.
         
@@ -39,6 +40,7 @@ class DangerZoneMonitor:
             fps: Expected frame rate of the video feed (important for video writers and buffers).
             loitering_threshold: Duration in seconds to trigger loitering alert.
             loitering_alert_cooldown: Cooldown between successive loitering alerts.
+            async_inference: Run TensorRT inference in a worker thread for lower frame-loop latency.
         """
         logger.info("Initializing DangerZoneMonitor package...")
         # Camera-wide loitering tracking
@@ -55,7 +57,10 @@ class DangerZoneMonitor:
         
         # 1. Initialize core managers and components
         self.zone_manager = ZoneManager(zone_file=zone_file)
-        self.tracker = PersonTracker(model_path=model_path)
+        self.tracker = PersonTracker(
+            model_path=model_path,
+            async_inference=async_inference
+        )
         self.video_recorder = VideoRecorder(
             recordings_dir=recordings_dir,
             snapshots_dir=snapshots_dir
@@ -74,6 +79,10 @@ class DangerZoneMonitor:
         )
         
         logger.info("DangerZoneMonitor initialization complete.")
+
+    def close(self) -> None:
+        if hasattr(self, "tracker"):
+            self.tracker.close()
 
     def process_frame(self, frame: np.ndarray, counter=None) -> np.ndarray:
         """Processes a single frame: tracks people, checks zones, manages intrusions,

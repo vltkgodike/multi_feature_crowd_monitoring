@@ -25,6 +25,7 @@ from danger_zone_monitor.zone_manager import ZoneManager
 from danger_zone_monitor.csv_logger import CSVLogger
 from danger_zone_monitor.intrusion_manager import IntrusionManager, PersonZoneState
 from danger_zone_monitor.video_recorder import VideoRecorder
+from danger_zone_monitor.person_tracker import BoTSORTLiteTracker, Detection
 
 
 class TestModels(unittest.TestCase):
@@ -163,6 +164,34 @@ class TestVideoRecorder(unittest.TestCase):
         self.assertTrue(os.path.exists(path))
         self.assertTrue(path.endswith("event_0042_loiter_10s.jpg"))
         self.assertIn("loitering", path)
+
+
+class TestBoTSORTLiteTracker(unittest.TestCase):
+    """Tests lightweight BoT-SORT-style ID continuity."""
+
+    def test_preserves_track_id_with_motion_prediction(self):
+        tracker = BoTSORTLiteTracker(iou_threshold=0.2, max_missed=3)
+
+        first = tracker.update([
+            Detection(bbox=(10, 10, 50, 90), confidence=0.9)
+        ])
+        self.assertEqual(len(first), 1)
+        track_id = first[0].track_id
+
+        second = tracker.update([
+            Detection(bbox=(14, 10, 54, 90), confidence=0.88)
+        ])
+        self.assertEqual(len(second), 1)
+        self.assertEqual(second[0].track_id, track_id)
+
+        missing = tracker.update([])
+        self.assertEqual(missing, [])
+
+        third = tracker.update([
+            Detection(bbox=(20, 10, 60, 90), confidence=0.86)
+        ])
+        self.assertEqual(len(third), 1)
+        self.assertEqual(third[0].track_id, track_id)
 
 
 class TestIntrusionManager(unittest.TestCase):

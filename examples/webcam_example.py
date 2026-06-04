@@ -25,6 +25,7 @@ def main():
     parser.add_argument("--fps", type=float, default=30.0, help="Expected video frames per second")
     parser.add_argument("--loiter-threshold", type=float, default=10.0, help="Loitering threshold in seconds")
     parser.add_argument("--loiter-cooldown", type=float, default=5.0, help="Loitering alert cooldown in seconds")
+    parser.add_argument("--sync-inference", action="store_true", help="Disable threaded TensorRT inference")
     args = parser.parse_args()
 
     # Determine source (integer for webcam, string for video file path)
@@ -54,7 +55,8 @@ def main():
         zone_file=args.config,
         fps=fps,
         loitering_threshold=args.loiter_threshold,
-        loitering_alert_cooldown=args.loiter_cooldown
+        loitering_alert_cooldown=args.loiter_cooldown,
+        async_inference=not args.sync_inference
     )
     counter = SingleLineCounter(
         json_file="line.json"
@@ -87,6 +89,7 @@ def main():
     except KeyboardInterrupt:
         logger.info("Keyboard interrupt received.")
     finally:
+        monitor.close()
         cap.release()
         cv2.destroyAllWindows()
         logger.info("Released camera resource and closed windows.")
