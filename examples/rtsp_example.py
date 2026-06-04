@@ -22,7 +22,7 @@ def run_monitor(rtsp_url: str, model_path: str, zone_file: str, fallback_fps: fl
     
     Args:
         rtsp_url: The RTSP stream address.
-        model_path: Path to model weights.
+        model_path: Path to YOLO TensorRT .engine model.
         zone_file: Path to zone configuration file.
         fallback_fps: Fallback FPS if detection fails.
         retry_interval: Time in seconds to wait before trying to reconnect.
@@ -96,7 +96,7 @@ def run_monitor(rtsp_url: str, model_path: str, zone_file: str, fallback_fps: fl
 def main():
     parser = argparse.ArgumentParser(description="Danger Zone Monitor - RTSP Example")
     parser.add_argument("--url", type=str, required=True, help="RTSP Stream URL (e.g., rtsp://username:password@ip:port/stream)")
-    parser.add_argument("--model", type=str, default="models/yolov8n.pt", help="Path to YOLOv8 model weights")
+    parser.add_argument("--model", type=str, default="models/yolov8n.engine", help="Path to YOLOv8 TensorRT .engine model")
     parser.add_argument("--config", type=str, default="config/zones.json", help="Path to zones JSON configuration")
     parser.add_argument("--fps", type=float, default=25.0, help="Fallback FPS if stream doesn't expose FPS metadata")
     parser.add_argument("--retry", type=int, default=5, help="Seconds to wait before reconnecting after a disconnect")

@@ -10,21 +10,29 @@ logger = logging.getLogger(__name__)
 class PersonTracker:
     """Uses YOLOv8 and ByteTrack to detect and track people in video frames."""
 
-    def __init__(self, model_path: str = "models/yolov8n.pt"):
+    def __init__(self, model_path: str = "models/yolov8n.engine"):
         """Initializes the YOLOv8 model for tracking.
         
         Args:
-            model_path: Path to the YOLOv8 model weights file.
+            model_path: Path to a YOLO model file. TensorRT .engine files are
+                supported, and .pt files can still be passed explicitly.
         """
         self.model_path = model_path
+        model_ext = os.path.splitext(self.model_path)[1].lower()
         
-        # Ensure parent directory of model_path exists
+        # Ensure parent directory of model_path exists.
         dir_name = os.path.dirname(model_path)
         if dir_name:
             os.makedirs(dir_name, exist_ok=True)
+
+        if model_ext == ".engine" and not os.path.exists(self.model_path):
+            raise FileNotFoundError(
+                f"TensorRT engine model not found: {self.model_path}. "
+                "Export or copy the .engine file to this path, or pass a valid "
+                ".engine path with --model."
+            )
             
         logger.info(f"Loading YOLOv8 model from {model_path}...")
-        # Ultralytics will download the model to model_path if it doesn't exist
         self.model = YOLO(self.model_path)
         logger.info("YOLOv8 model loaded successfully.")
 
