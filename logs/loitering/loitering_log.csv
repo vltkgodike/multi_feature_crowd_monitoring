@@ -1,0 +1,3 @@
+EventID,PersonID,ZoneID,ZoneName,EntryTime,ExitTime,DurationSeconds,VideoPath,SnapshotPath
+9,1,3,bhavani_beside_denger,2026-06-03T18:49:59.038565,2026-06-03T18:51:03.471462,64.43,C:\Users\valkontek 010\Downloads\danger_zones_detection\multi_feature_crowd_monitoring\recordings\loitering\event_0009.mp4,C:\Users\valkontek 010\Downloads\danger_zones_detection\multi_feature_crowd_monitoring\snapshots\loitering\event_0009.jpg
+10,44,3,bhavani_beside_denger,2026-06-03T18:51:52.044365,2026-06-03T18:52:31.813020,39.77,C:\Users\valkontek 010\Downloads\danger_zones_detection\multi_feature_crowd_monitoring\recordings\loitering\event_0010.mp4,C:\Users\valkontek 010\Downloads\danger_zones_detection\multi_feature_crowd_monitoring\snapshots\loitering\event_0010.jpg
