@@ -19,7 +19,7 @@ class DangerZoneMonitor:
 
     def __init__(
         self,
-        model_path: str = "models/yolov8n.engine",
+        model_path: str = "models/yolov8m.engine",
         zone_file: str = "config/zones.json",
         recordings_dir: str = "recordings",
         snapshots_dir: str = "snapshots",
@@ -31,8 +31,7 @@ class DangerZoneMonitor:
         """Initializes the danger zone monitor.
         
         Args:
-            model_path: Path to the YOLO model file. Defaults to a TensorRT
-                .engine model.
+            model_path: Path to the YOLOv8 model weights file.
             zone_file: Path to the JSON configuration file containing zone coordinates.
             recordings_dir: Directory where video recordings will be saved.
             snapshots_dir: Directory where snapshots will be saved.
@@ -42,6 +41,10 @@ class DangerZoneMonitor:
             loitering_alert_cooldown: Cooldown between successive loitering alerts.
         """
         logger.info("Initializing DangerZoneMonitor package...")
+        # Camera-wide loitering tracking
+        self.person_first_seen = {}
+        self.person_loiter_saved = set()
+        self.person_loiter_recorders = {}
         
         # 0. Initialize database connection and tables
         try:
@@ -92,15 +95,72 @@ class DangerZoneMonitor:
         
         # 1. Track people in the frame
         tracked_people = self.tracker.track(out_frame)
-        
+        current_time = time()
+
+        # Camera-wide loitering detection (independent of zones)
+        for person in tracked_people:
+
+            track_id = person.track_id
+
+            if track_id not in self.person_first_seen:
+                self.person_first_seen[track_id] = current_time
+
+            duration = current_time - self.person_first_seen[track_id]
+
+            # Save once when visible for 10+ seconds
+            if duration >= 10 and track_id not in self.person_loiter_saved:
+
+                try:
+                    event_id = self.video_recorder.get_next_event_id()
+
+                    self.video_recorder.save_snapshot(
+                        frame=out_frame,
+                        event_id=event_id,
+                        suffix=f"_person_{track_id}",
+                        subdir="loitering"
+                    )
+
+                    writer, video_path = self.video_recorder.start_recording(
+                        event_id=event_id,
+                        fps=self.intrusion_manager.fps,
+                        frame_size=(out_frame.shape[1], out_frame.shape[0]),
+                        subdir="loitering"
+                    )
+                    self.person_loiter_recorders[track_id] = writer
+
+                    logger.warning(
+                        f"LOITERING DETECTED: ID={track_id} visible for {duration:.1f}s"
+                    )
+
+                    self.person_loiter_saved.add(track_id)
+
+                except Exception as e:
+                    logger.error(f"Loitering snapshot failed: {e}")
+
         # 2. Update intrusion state machine
         occupied_zones = self.intrusion_manager.update_with_frame(
             tracked_people=tracked_people,
             zone_manager=self.zone_manager,
             frame=out_frame
         )
-        
-        
+
+        # Write loitering clip frames for any active recorded people
+        for track_id, writer in list(self.person_loiter_recorders.items()):
+            try:
+                self.video_recorder.write_frame(writer, out_frame)
+            except Exception as e:
+                logger.error(f"Failed to write loitering frame for ID={track_id}: {e}")
+
+        # Cleanup IDs that disappeared
+        active_ids = {p.track_id for p in tracked_people}
+
+        for track_id in list(self.person_first_seen.keys()):
+            if track_id not in active_ids:
+                self.person_first_seen.pop(track_id, None)
+                self.person_loiter_saved.discard(track_id)
+                if track_id in self.person_loiter_recorders:
+                    self.video_recorder.stop_recording(self.person_loiter_recorders.pop(track_id))
+
         # 3. Draw monitored danger zones (filled polygons + borders)
         out_frame = self.zone_manager.draw_zones(out_frame, occupied_zones)
         
@@ -125,12 +185,20 @@ class DangerZoneMonitor:
                     if getattr(state, "is_loitering", False):
                         is_loitering = True
                         loiter_duration = state.duration
-            
-            # Cyan for outside, orange for entering, red for confirmed intrusion
+
+            # Camera-wide loitering detection independent of zone membership
+            camera_loiter_duration = 0.0
+            if person.track_id in self.person_first_seen:
+                camera_loiter_duration = current_time - self.person_first_seen[person.track_id]
+                if camera_loiter_duration >= self.intrusion_manager.loitering_threshold:
+                    is_loitering = True
+                    loiter_duration = camera_loiter_duration
+
+            # Cyan for outside, orange for entering, red for confirmed intrusion/loitering
             box_thickness = 2
             if is_loitering:
                 color = (0, 0, 255)
-                label_prefix = f"LOITER ALERT - {int(loiter_duration)}s"
+                label_prefix = f"LOITERING - {int(loiter_duration)}s"
                 box_thickness = 3
             elif is_confirmed:
                 color = (0, 0, 255)
