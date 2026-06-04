@@ -387,5 +387,45 @@ class TestIntrusionManager(unittest.TestCase):
         ])
 
 
+class TestPostgresDb(unittest.TestCase):
+    """Tests for database operations, focusing on the newly added zone deletion function."""
+
+    def test_delete_zone(self):
+        import sys
+        import importlib
+
+        # Save the mocked version
+        mocked_db = sys.modules.get('postgres_db')
+        if 'postgres_db' in sys.modules:
+            del sys.modules['postgres_db']
+
+        try:
+            # Import the real postgres_db module
+            import postgres_db
+            
+            # Setup mocks for psycopg2 connection and cursor
+            postgres_db.conn = MagicMock()
+            postgres_db.cursor = MagicMock()
+            
+            # Mock ensure_connection to return True
+            original_ensure = postgres_db.ensure_connection
+            postgres_db.ensure_connection = MagicMock(return_value=True)
+            
+            try:
+                # Call delete_zone
+                postgres_db.delete_zone(42)
+                
+                # Check cursor.execute was called with correct SQL and args
+                postgres_db.cursor.execute.assert_called_once_with("DELETE FROM zones WHERE id = %s;", (42,))
+                # Check connection commit was called
+                postgres_db.conn.commit.assert_called_once()
+            finally:
+                postgres_db.ensure_connection = original_ensure
+        finally:
+            # Restore the mock db for other tests
+            if mocked_db:
+                sys.modules['postgres_db'] = mocked_db
+
+
 if __name__ == "__main__":
     unittest.main()

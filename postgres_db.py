@@ -792,6 +792,28 @@ def upsert_zone(zone_id, name, points):
 
 
 # =========================================
+# DELETE ZONE DATA
+# =========================================
+
+def delete_zone(zone_id):
+    """Deletes a zone with specific ID if it exists."""
+    global conn, cursor
+
+    try:
+        ensure_connection()
+
+        cursor.execute("DELETE FROM zones WHERE id = %s;", (zone_id,))
+        conn.commit()
+        print(f"✅ Zone deleted from DB ID: {zone_id}")
+
+    except Exception as e:
+        print(f"❌ Zone deletion failed for ID: {zone_id}")
+        print(e)
+        if conn:
+            conn.rollback()
+
+
+# =========================================
 # MAIN
 # =========================================
 
