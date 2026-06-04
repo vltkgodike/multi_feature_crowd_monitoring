@@ -19,7 +19,7 @@ class DangerZoneMonitor:
 
     def __init__(
         self,
-        model_path: str = "models/yolov8m.engine",
+        model_path: str = "models/yolov8n.engine",
         zone_file: str = "config/zones.json",
         recordings_dir: str = "recordings",
         snapshots_dir: str = "snapshots",
