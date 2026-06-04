@@ -19,7 +19,7 @@ class DangerZoneMonitor:
 
     def __init__(
         self,
-        model_path: str = "models/yolov8n.pt",
+        model_path: str = "models/yolov8n.engine",
         zone_file: str = "config/zones.json",
         recordings_dir: str = "recordings",
         snapshots_dir: str = "snapshots",
@@ -31,7 +31,8 @@ class DangerZoneMonitor:
         """Initializes the danger zone monitor.
         
         Args:
-            model_path: Path to the YOLOv8 model weights file.
+            model_path: Path to the YOLO model file. Defaults to a TensorRT
+                .engine model.
             zone_file: Path to the JSON configuration file containing zone coordinates.
             recordings_dir: Directory where video recordings will be saved.
             snapshots_dir: Directory where snapshots will be saved.

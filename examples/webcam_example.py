@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 def main():
     parser = argparse.ArgumentParser(description="Danger Zone Monitor - Webcam/Video Stream Example")
     parser.add_argument("--source", type=str, default="0", help="Webcam index (e.g., 0) or path to video file")
-    parser.add_argument("--model", type=str, default="models/yolov8n.pt", help="Path to YOLOv8 model weights")
+    parser.add_argument("--model", type=str, default="models/yolov8n.engine", help="Path to YOLOv8 TensorRT .engine model")
     parser.add_argument("--config", type=str, default="config/zones.json", help="Path to zones JSON configuration")
     parser.add_argument("--fps", type=float, default=30.0, help="Expected video frames per second")
     parser.add_argument("--loiter-threshold", type=float, default=10.0, help="Loitering threshold in seconds")

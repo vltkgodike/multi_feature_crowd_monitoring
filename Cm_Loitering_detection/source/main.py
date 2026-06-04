@@ -70,8 +70,8 @@ def draw_box(event, x, y, flags, param):
 # LOAD MODEL
 # ==========================================
 
-log_message("[MODEL] Loading YOLOv8n model...")
-model = YOLO("yolov8n.pt")
+log_message("[MODEL] Loading YOLOv8 TensorRT engine model...")
+model = YOLO("models/yolov8n.engine")
 log_message("[MODEL] Model loaded successfully")
 
 # ==========================================
