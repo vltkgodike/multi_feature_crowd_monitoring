@@ -9,10 +9,16 @@ if sys.platform.startswith("win"):
     except Exception:
         pass
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import json
+
+try:
+    from zoneinfo import ZoneInfo
+except Exception:
+    ZoneInfo = None
 
 
 # =========================================
@@ -24,6 +30,7 @@ DB_NAME = "postgres"
 DB_USER = "postgres.vxpyljtmndedusttnvlz"
 DB_PASSWORD = "Bhavanibab@30"
 DB_PORT = 5432
+APP_TIMEZONE = os.environ.get("APP_TIMEZONE", "Asia/Kolkata")
 
 
 # =========================================
@@ -32,6 +39,34 @@ DB_PORT = 5432
 
 conn = None
 cursor = None
+
+
+def _get_app_timezone():
+    if ZoneInfo is not None:
+        try:
+            return ZoneInfo(APP_TIMEZONE)
+        except Exception:
+            pass
+
+    if APP_TIMEZONE in ("Asia/Kolkata", "Asia/Calcutta", "IST"):
+        return timezone(timedelta(hours=5, minutes=30))
+
+    return datetime.now().astimezone().tzinfo
+
+
+def current_db_timestamp():
+    """Return local app time for TIMESTAMP WITHOUT TIME ZONE columns."""
+    return datetime.now(_get_app_timezone()).replace(tzinfo=None)
+
+
+def to_db_timestamp(value=None):
+    if value is None:
+        return current_db_timestamp()
+
+    if value.tzinfo is None:
+        return value
+
+    return value.astimezone(_get_app_timezone()).replace(tzinfo=None)
 
 
 # =========================================
@@ -61,6 +96,13 @@ def connect_db():
         cursor = conn.cursor(
             cursor_factory=RealDictCursor
         )
+
+        try:
+            cursor.execute("SET TIME ZONE %s;", (APP_TIMEZONE,))
+            conn.commit()
+        except Exception as tz_error:
+            conn.rollback()
+            print(f"⚠️ Failed to set database timezone to {APP_TIMEZONE}: {tz_error}")
 
         print("✅ Connected to Supabase PostgreSQL")
 
@@ -293,18 +335,20 @@ def create_default_zone():
             INSERT INTO zones (
 
                 name,
-                points
+                points,
+                created_at
 
             )
 
-            VALUES (%s, %s)
+            VALUES (%s, %s, %s)
 
             RETURNING id;
 
             """,
             (
                 "0",
-                json.dumps([])
+                json.dumps([]),
+                current_db_timestamp()
             )
         )
 
@@ -373,13 +417,15 @@ def update_zone(zone_id, name, points):
 # INSERT DEFAULT INTRUSION EVENT
 # =========================================
 
-def create_default_intrusion_event(zone_id=0):
+def create_default_intrusion_event(zone_id=0, entry_time=None):
 
     global conn, cursor
 
     try:
 
         ensure_connection()
+        event_time = to_db_timestamp(entry_time)
+        created_at = current_db_timestamp()
 
         cursor.execute(
             """
@@ -388,17 +434,19 @@ def create_default_intrusion_event(zone_id=0):
                 person_id,
                 zone_id,
                 entry_time,
+                exit_time,
                 duration_seconds,
                 video_path,
                 snapshot_path,
-                is_loitering
+                is_loitering,
+                created_at
             )
-            VALUES (0, %s, %s, 0.0, '0', '0', FALSE)
+            VALUES (0, %s, %s, %s, 0.0, '0', '0', FALSE, %s)
 
             RETURNING event_id;
 
             """,
-            (zone_id, datetime.now(),)
+            (zone_id, event_time, event_time, created_at)
         )
 
         result = cursor.fetchone()
@@ -430,7 +478,8 @@ def update_intrusion_event(
     duration_seconds,
     video_path,
     snapshot_path,
-    is_loitering
+    is_loitering,
+    exit_time=None
 ):
 
     global conn, cursor
@@ -459,7 +508,7 @@ def update_intrusion_event(
             (
                 person_id,
                 zone_id,
-                datetime.now(),
+                to_db_timestamp(exit_time),
                 duration_seconds,
                 video_path,
                 snapshot_path,
@@ -484,13 +533,14 @@ def update_intrusion_event(
 # INSERT DEFAULT LOITERING ALERT
 # =========================================
 
-def create_default_loitering_alert(event_id):
+def create_default_loitering_alert(event_id, alert_time=None):
 
     global conn, cursor
 
     try:
 
         ensure_connection()
+        alert_time = to_db_timestamp(alert_time)
 
         cursor.execute(
             """
@@ -498,14 +548,16 @@ def create_default_loitering_alert(event_id):
             INSERT INTO loitering_alerts (
                 event_id,
                 dwell_time_seconds,
-                snapshot_path
+                alert_time,
+                snapshot_path,
+                created_at
             )
-            VALUES (%s, 0.0, '0')
+            VALUES (%s, 0.0, %s, '0', %s)
 
             RETURNING alert_id;
 
             """,
-            (event_id,)
+            (event_id, alert_time, alert_time)
         )
 
         result = cursor.fetchone()
@@ -534,7 +586,8 @@ def update_loitering_alert(
     alert_id,
     event_id,
     dwell_time_seconds,
-    snapshot_path
+    snapshot_path,
+    alert_time=None
 ):
 
     global conn, cursor
@@ -551,6 +604,7 @@ def update_loitering_alert(
             SET
                 event_id = %s,
                 dwell_time_seconds = %s,
+                alert_time = %s,
                 snapshot_path = %s
 
             WHERE alert_id = %s;
@@ -559,6 +613,7 @@ def update_loitering_alert(
             (
                 event_id,
                 dwell_time_seconds,
+                to_db_timestamp(alert_time),
                 snapshot_path,
                 alert_id
             )
@@ -580,27 +635,30 @@ def update_loitering_alert(
 # INSERT DEFAULT LINE CROSSING
 # =========================================
 
-def create_default_line_crossing(direction="IN"):
+def create_default_line_crossing(direction="IN", crossing_time=None):
 
     global conn, cursor
 
     try:
 
         ensure_connection()
+        crossing_time = to_db_timestamp(crossing_time)
 
         cursor.execute(
             """
 
             INSERT INTO line_crossings (
                 person_id,
-                direction
+                direction,
+                crossing_time,
+                created_at
             )
-            VALUES (0, %s)
+            VALUES (0, %s, %s, %s)
 
             RETURNING crossing_id;
 
             """,
-            (direction,)
+            (direction, crossing_time, crossing_time)
         )
 
         result = cursor.fetchone()
@@ -628,7 +686,8 @@ def create_default_line_crossing(direction="IN"):
 def update_line_crossing(
     crossing_id,
     person_id,
-    direction
+    direction,
+    crossing_time=None
 ):
 
     global conn, cursor
@@ -644,7 +703,8 @@ def update_line_crossing(
 
             SET
                 person_id = %s,
-                direction = %s
+                direction = %s,
+                crossing_time = %s
 
             WHERE crossing_id = %s;
 
@@ -652,6 +712,7 @@ def update_line_crossing(
             (
                 person_id,
                 direction,
+                to_db_timestamp(crossing_time),
                 crossing_id
             )
         )
@@ -708,14 +769,16 @@ def upsert_zone(zone_id, name, points):
                 INSERT INTO zones (
                     id,
                     name,
-                    points
+                    points,
+                    created_at
                 )
-                VALUES (%s, %s, %s);
+                VALUES (%s, %s, %s, %s);
                 """,
                 (
                     zone_id,
                     name,
-                    json.dumps(points)
+                    json.dumps(points),
+                    current_db_timestamp()
                 )
             )
             conn.commit()

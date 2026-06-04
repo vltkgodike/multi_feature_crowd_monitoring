@@ -211,7 +211,10 @@ class IntrusionManager:
                         state.is_confirmed = True
                         try:
                             import postgres_db
-                            db_event_id = postgres_db.create_default_intrusion_event(state.zone_id)
+                            db_event_id = postgres_db.create_default_intrusion_event(
+                                state.zone_id,
+                                entry_time=state.entry_time
+                            )
                             if db_event_id is not None:
                                 state.event_id = db_event_id
                             else:
@@ -258,13 +261,17 @@ class IntrusionManager:
                             loiter_snapshot_path = self.video_recorder.save_snapshot(frame, state.event_id, suffix=f"_loiter_{int(state.duration)}s", subdir="loitering")
                             try:
                                 import postgres_db
-                                alert_id = postgres_db.create_default_loitering_alert(state.event_id)
+                                alert_id = postgres_db.create_default_loitering_alert(
+                                    state.event_id,
+                                    alert_time=current_time
+                                )
                                 if alert_id is not None:
                                     postgres_db.update_loitering_alert(
                                         alert_id=alert_id,
                                         event_id=state.event_id,
                                         dwell_time_seconds=state.duration,
-                                        snapshot_path=loiter_snapshot_path
+                                        snapshot_path=loiter_snapshot_path,
+                                        alert_time=current_time
                                     )
                             except Exception as e:
                                 logger.error(f"Failed to log loitering alert in database: {e}")
@@ -369,7 +376,8 @@ class IntrusionManager:
                         duration_seconds=state.duration,
                         video_path=";".join(state.video_paths),
                         snapshot_path=state.snapshot_path,
-                        is_loitering=state.is_loitering
+                        is_loitering=state.is_loitering,
+                        exit_time=state.exit_time
                     )
                 except Exception as e:
                     logger.error(f"Failed to update intrusion event {state.event_id} in database: {e}")

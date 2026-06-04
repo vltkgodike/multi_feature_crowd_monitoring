@@ -128,6 +128,7 @@ class SingleLineCounter:
     def _log_crossing(self, track_id, direction):
         from datetime import datetime
         import csv
+        crossing_time = datetime.now()
         
         crossing_id = 1
         if os.path.exists(self.log_file):
@@ -144,19 +145,23 @@ class SingleLineCounter:
                     crossing_id,
                     track_id,
                     direction,
-                    datetime.now().isoformat()
+                    crossing_time.isoformat()
                 ])
         except Exception as e:
             print(f"[ERROR] Failed to log crossing: {e}")
             
         try:
             import postgres_db
-            db_crossing_id = postgres_db.create_default_line_crossing()
+            db_crossing_id = postgres_db.create_default_line_crossing(
+                direction=direction,
+                crossing_time=crossing_time
+            )
             if db_crossing_id is not None:
                 postgres_db.update_line_crossing(
                     crossing_id=db_crossing_id,
                     person_id=track_id,
-                    direction=direction
+                    direction=direction,
+                    crossing_time=crossing_time
                 )
         except Exception as e:
             print(f"[ERROR] Failed to push line crossing to database: {e}")
