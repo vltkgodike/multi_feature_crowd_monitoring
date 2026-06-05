@@ -116,7 +116,6 @@ Real-time KPI cards provide an instant overview of site activity.
 
 Displays the total number of recorded intrusion events.
 
-**Source:** `/api/intrusions`
 
 Metrics:
 
@@ -129,7 +128,7 @@ Metrics:
 
 Displays the number of configured monitored zones.
 
-**Source:** `/api/zones`
+
 
 Metrics:
 
@@ -141,7 +140,6 @@ Metrics:
 
 Displays total loitering incidents detected.
 
-**Source:** `/api/loitering-alerts`
 
 Metrics:
 
@@ -154,7 +152,7 @@ Metrics:
 
 Displays total entry and exit activity.
 
-**Source:** `/api/line-crossings/stats`
+
 
 Metrics:
 
@@ -168,7 +166,6 @@ Metrics:
 
 A centralized intrusion monitoring workspace for security operators.
 
-**Source:** `/api/intrusions`
 
 ### Features
 
@@ -208,7 +205,6 @@ A centralized intrusion monitoring workspace for security operators.
 
 Provides immediate visibility into recent loitering incidents.
 
-**Source:** `/api/loitering-alerts/recent`
 
 ### Alert Details
 
@@ -226,7 +222,6 @@ Alerts are displayed chronologically to help operators quickly identify ongoing 
 
 Visual representation of configured security zones.
 
-**Source:** `/api/zones`
 
 ### Zone Information
 
@@ -251,7 +246,6 @@ Provides insights into movement patterns across monitored areas.
 
 ### IN vs OUT Analytics
 
-**Source:** `/api/line-crossings`
 
 Visualizations include:
 
@@ -263,7 +257,6 @@ Visualizations include:
 
 ### Flow Distribution
 
-**Source:** `/api/line-crossings/stats`
 
 Metrics:
 
@@ -288,7 +281,7 @@ Key operational metrics:
 
 Tracks individual crossing activities.
 
-**Source:** `/api/line-crossings`
+
 
 ### Event Information
 
@@ -315,7 +308,7 @@ Tracks individual crossing activities.
 
 ### Intrusion Analytics
 
-**Source:** `/api/intrusions`
+
 
 Metrics:
 
@@ -333,7 +326,6 @@ Visualizations:
 
 ### Loitering Analytics
 
-**Source:** `/api/loitering-alerts`
 
 Metrics:
 
@@ -351,8 +343,6 @@ Visualizations:
 
 ### Flow Analytics
 
-**Source:** `/api/line-crossings`
-`/api/line-crossings/stats`
 
 Metrics:
 
@@ -368,7 +358,7 @@ Visualizations:
 
 ### Danger Zone Analytics
 
-**Source:** `/api/zones`
+
 
 Metrics:
 
