@@ -22,9 +22,9 @@ STORAGE_THRESHOLD=50
 
 # ------------------------------------------------
  
-VIDEO_SOURCE="/home/sai/jetson-storage/projects/multi_feature_crowd_monitoring/recordings"
+VIDEO_SOURCE="/home/sai/jetson-storage/projects/multi_feature_crowd_monitoring/recordings/"
 
-SNAPSHOT_SOURCE="/home/sai/jetson-storage/projects/multi_feature_crowd_monitoring/snapshots"
+SNAPSHOT_SOURCE="/home/sai/jetson-storage/projects/multi_feature_crowd_monitoring/snapshots/"
  
 # ------------------------------------------------
 
