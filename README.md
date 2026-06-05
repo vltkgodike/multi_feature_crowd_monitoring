@@ -80,7 +80,7 @@ Video Stream (CCTV/IP Camera)
 ↓
 Object Detection (YOLO)
 ↓
-Multi-Object Tracking (ByteTrack/SORT)
+Multi-Object Tracking (Bot-Sort)
 ↓
 Behavior Analysis Engine
 ↓
