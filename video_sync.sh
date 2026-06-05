@@ -12,7 +12,7 @@ SERVER_IP="storage.valkontek.com"
 
 SERVER_PORT="2222"
  
-LOG_FILE="/home/jetson/app/video_sync.log"
+LOG_FILE="/home/sai/jetson-storage/projects/multi_feature_crowd_monitoring/video_sync.log"
  
 STORAGE_THRESHOLD=50
  
@@ -22,9 +22,9 @@ STORAGE_THRESHOLD=50
 
 # ------------------------------------------------
  
-VIDEO_SOURCE="/home/jetson/app/recordings/"
+VIDEO_SOURCE="/home/sai/jetson-storage/projects/multi_feature_crowd_monitoring/recordings"
 
-SNAPSHOT_SOURCE="/home/jetson/app/snapshots/"
+SNAPSHOT_SOURCE="/home/sai/jetson-storage/projects/multi_feature_crowd_monitoring/snapshots"
  
 # ------------------------------------------------
 
@@ -32,9 +32,9 @@ SNAPSHOT_SOURCE="/home/jetson/app/snapshots/"
 
 # ------------------------------------------------
  
-VIDEO_DEST="/home/storage/crowd_monitoring/recordings/"
+VIDEO_DEST="/home/storage/crowd_monitoring_storage/recordings/"
 
-SNAPSHOT_DEST="/home/storage/crowd_monitoring/snapshots/"
+SNAPSHOT_DEST="/home/storage/crowd_monitoring_storage/snapshots/"
  
 # ------------------------------------------------
 

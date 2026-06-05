@@ -1,29 +1,24 @@
 {
   "zones": [
-    
     {
-      "zone_id": 3,
-      "zone_name": "bhavani_beside_denger",
+      "zone_id": 1,
+      "zone_name": "danger_zone",
       "points": [
         [
-          368,
-          109
+          410,
+          116
         ],
         [
-          334,
-          487
+          561,
+          119
         ],
         [
-          487,
-          503
+          558,
+          393
         ],
         [
-          549,
-          139
-        ],
-        [
-          370,
-          111
+          410,
+          405
         ]
       ]
     }
