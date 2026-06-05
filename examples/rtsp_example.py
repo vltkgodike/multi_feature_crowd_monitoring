@@ -24,6 +24,7 @@ def run_monitor(
     fallback_fps: float,
     retry_interval: int,
     async_inference: bool,
+    display: bool,
 ):
     """Runs the danger zone monitor on an RTSP stream with robust auto-reconnection.
     
@@ -36,7 +37,8 @@ def run_monitor(
     """
     monitor = None
     window_name = f"Danger Zone Monitor - RTSP Stream"
-    cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+    if display:
+        cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
 
     while True:
         logger.info(f"Connecting to RTSP stream: {rtsp_url}...")
@@ -81,19 +83,20 @@ def run_monitor(
 
                 consecutive_failures = 0
 
-                # Process and render
+                # Process frame
                 processed_frame = monitor.process_frame(frame)
-                cv2.imshow(window_name, processed_frame)
+                if display:
+                    cv2.imshow(window_name, processed_frame)
 
-                # Check for exit request
-                key = cv2.waitKey(1) & 0xFF
-                if key in [ord('q'), 27]:
-                    logger.info("User exited program.")
-                    if monitor is not None:
-                        monitor.close()
-                    cap.release()
-                    cv2.destroyAllWindows()
-                    return
+                    # Check for exit request
+                    key = cv2.waitKey(1) & 0xFF
+                    if key in [ord('q'), 27]:
+                        logger.info("User exited program.")
+                        if monitor is not None:
+                            monitor.close()
+                        cap.release()
+                        cv2.destroyAllWindows()
+                        return
 
         except Exception as e:
             logger.error(f"Error during stream processing: {e}")
@@ -111,6 +114,7 @@ def main():
     parser.add_argument("--fps", type=float, default=25.0, help="Fallback FPS if stream doesn't expose FPS metadata")
     parser.add_argument("--retry", type=int, default=5, help="Seconds to wait before reconnecting after a disconnect")
     parser.add_argument("--sync-inference", action="store_true", help="Disable threaded TensorRT inference")
+    parser.add_argument("--display", action="store_true", help="Display the live video feed with overlays")
     args = parser.parse_args()
 
     run_monitor(
@@ -119,7 +123,8 @@ def main():
         zone_file=args.config,
         fallback_fps=args.fps,
         retry_interval=args.retry,
-        async_inference=not args.sync_inference
+        async_inference=not args.sync_inference,
+        display=args.display
     )
 
 if __name__ == "__main__":

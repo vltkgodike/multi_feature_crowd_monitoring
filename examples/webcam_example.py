@@ -8,6 +8,7 @@ import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from in_out.find_direction import SingleLineCounter
 from danger_zone_monitor import DangerZoneMonitor
+from danger_zone_monitor.tools.zone_drawer import ZoneDrawer
 
 # Configure standard logging to console
 logging.basicConfig(
@@ -26,6 +27,7 @@ def main():
     parser.add_argument("--loiter-threshold", type=float, default=10.0, help="Loitering threshold in seconds")
     parser.add_argument("--loiter-cooldown", type=float, default=5.0, help="Loitering alert cooldown in seconds")
     parser.add_argument("--sync-inference", action="store_true", help="Disable threaded TensorRT inference")
+    parser.add_argument("--display", action="store_true", help="Display the live video feed with overlays")
     args = parser.parse_args()
 
     # Determine source (integer for webcam, string for video file path)
@@ -61,12 +63,32 @@ def main():
     counter = SingleLineCounter(
         json_file="line.json"
     )
+    zone_editor = ZoneDrawer(
+        config_path=args.config,
+        open_source=False
+    )
+    ui_state = {
+        "edit_mode": "line"
+    }
 
     window_name = "Danger Zone Monitor HUD"
-    cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
-    cv2.setMouseCallback(window_name, counter.mouse_callback)
+    if args.display:
+        cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
 
-    logger.info("Starting processing loop. Press 'q' or Esc to exit.")
+        def mouse_callback(event, x, y, flags, param):
+            if ui_state["edit_mode"] == "zone":
+                zone_editor.handle_mouse_event(event, x, y, flags, param)
+            else:
+                counter.mouse_callback(event, x, y, flags, param)
+
+        cv2.setMouseCallback(window_name, mouse_callback)
+
+    if args.display:
+        logger.info("Starting processing loop. Press 'q' or Esc to exit.")
+        logger.info("UI modes: press 'L' for in/out line editing, 'Z' for zone editing.")
+        logger.info("Zone mode: click to add/select, drag vertices/zones, S save, D/Delete delete, C clear.")
+    else:
+        logger.info("Starting processing loop in headless mode. Press Ctrl+C to exit.")
 
     try:
         while True:
@@ -78,20 +100,57 @@ def main():
             # Process frame
             processed_frame = monitor.process_frame(frame, counter)
 
-            # Display output
-            cv2.imshow(window_name, processed_frame)
+            if args.display:
+                if ui_state["edit_mode"] == "zone":
+                    zone_editor.set_frame(processed_frame)
+                    zone_editor.draw_on_frame(processed_frame)
 
-            # Handle user interruption
-            key = cv2.waitKey(1) & 0xFF
-            if key in [ord('q'), 27]: # 'q' or ESC
-                logger.info("User requested exit.")
-                break
+                mode_label = f"EDIT MODE: {ui_state['edit_mode'].upper()}  |  L: line  Z: zones"
+                cv2.putText(
+                    processed_frame,
+                    mode_label,
+                    (20, 25),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.55,
+                    (255, 255, 255),
+                    2,
+                    cv2.LINE_AA
+                )
+
+                # Display output
+                cv2.imshow(window_name, processed_frame)
+
+                # Handle user interruption
+                key = cv2.waitKey(1) & 0xFF
+                if key in [ord('q'), 27]: # 'q' or ESC
+                    logger.info("User requested exit.")
+                    break
+                if key in [ord('z'), ord('Z')]:
+                    ui_state["edit_mode"] = "zone"
+                    logger.info("Switched to zone editing mode.")
+                elif key in [ord('l'), ord('L')]:
+                    ui_state["edit_mode"] = "line"
+                    logger.info("Switched to in/out line editing mode.")
+                elif ui_state["edit_mode"] == "zone" and key in [ord('s'), ord('S')]:
+                    zone_editor.save_current_zone()
+                elif ui_state["edit_mode"] == "zone" and key in [ord('d'), ord('D'), 8, 127]:
+                    zone_editor.delete_selected_zone()
+                elif ui_state["edit_mode"] == "zone" and key in [ord('c'), ord('C')]:
+                    zone_editor.clear_current_polygon()
+
+                if zone_editor.consume_config_changed():
+                    try:
+                        monitor.zone_manager.load_zones()
+                        logger.info("Reloaded active danger zones after UI edit.")
+                    except Exception as e:
+                        logger.error(f"Failed to reload danger zones after UI edit: {e}")
     except KeyboardInterrupt:
         logger.info("Keyboard interrupt received.")
     finally:
         monitor.close()
         cap.release()
-        cv2.destroyAllWindows()
+        if args.display:
+            cv2.destroyAllWindows()
         logger.info("Released camera resource and closed windows.")
 
 if __name__ == "__main__":
