@@ -242,6 +242,50 @@ class VideoRecorder:
 
         return full_filepath
 
+    def _build_full_recording_dir(self, timestamp: Optional[datetime] = None) -> str:
+        """Builds and creates the full recording output directory.
+
+        Structure: ``full_recordings/<camera_id>/<YYYY-MM-DD>/<HH>/``
+        """
+        ts = timestamp or datetime.now()
+        parent_dir = os.path.dirname(os.path.abspath(self.recordings_dir))
+        dir_path = os.path.join(
+            parent_dir,
+            "full_recordings",
+            self.camera_id,
+            ts.strftime("%Y-%m-%d"),
+            ts.strftime("%H"),
+        )
+        os.makedirs(dir_path, exist_ok=True)
+        return dir_path
+
+    def start_full_recording(
+        self,
+        fps: float,
+        frame_size: Tuple[int, int],
+    ) -> Tuple[cv2.VideoWriter, str]:
+        """Starts a VideoWriter for a full recording.
+
+        Returns:
+            A tuple of ``(cv2.VideoWriter, video_path)``.
+        """
+        now = datetime.now()
+        ts_str = now.strftime("%Y%m%d_%H%M%S")
+
+        rec_dir = self._build_full_recording_dir(timestamp=now)
+        filename = f"record_{ts_str}.mp4"
+        filepath = os.path.join(rec_dir, filename)
+
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+
+        logger.info(f"Opening VideoWriter for full recording: {filepath} with fps={fps}, size={frame_size}")
+        writer = cv2.VideoWriter(filepath, fourcc, float(fps), frame_size)
+
+        if not writer.isOpened():
+            logger.error(f"Failed to open VideoWriter for full recording: {filepath}")
+
+        return writer, filepath
+
     # ------------------------------------------------------------------
     # Video recording
     # ------------------------------------------------------------------

@@ -84,9 +84,22 @@ class DangerZoneMonitor:
             loitering_alert_cooldown=loitering_alert_cooldown
         )
         
+        # Full recording state
+        self.full_rec_writer = None
+        self.full_rec_path = None
+        self.full_rec_start_time = None
+        self.last_person_seen_time = None
+
         logger.info("DangerZoneMonitor initialization complete.")
 
     def close(self) -> None:
+        if hasattr(self, "full_rec_writer") and self.full_rec_writer is not None:
+            try:
+                self.video_recorder.stop_recording(self.full_rec_writer)
+            except Exception as e:
+                logger.error(f"Error closing full recording on shutdown: {e}")
+            self.full_rec_writer = None
+
         if hasattr(self, "tracker"):
             self.tracker.close()
 
@@ -111,6 +124,67 @@ class DangerZoneMonitor:
         # 1. Track people in the frame
         tracked_people = self.tracker.track(out_frame)
         current_time = time()
+
+        # --------------------------------------------------------------
+        # Full recording logic (starts on person detection, stops after 5s idle, <= 1min per file)
+        # --------------------------------------------------------------
+        person_detected = len(tracked_people) > 0
+        if person_detected:
+            self.last_person_seen_time = current_time
+            
+            # Start recording if not already recording
+            if self.full_rec_writer is None:
+                try:
+                    writer, filepath = self.video_recorder.start_full_recording(
+                        fps=self.intrusion_manager.fps,
+                        frame_size=(out_frame.shape[1], out_frame.shape[0])
+                    )
+                    self.full_rec_writer = writer
+                    self.full_rec_path = filepath
+                    self.full_rec_start_time = current_time
+                    logger.info(f"Started full recording: {filepath}")
+                except Exception as e:
+                    logger.error(f"Failed to start full recording: {e}")
+            else:
+                # Check if recording has exceeded 1 minute (60 seconds)
+                if current_time - self.full_rec_start_time >= 60.0:
+                    logger.info("Full recording reached 1 minute limit. Splitting recording.")
+                    self.video_recorder.stop_recording(self.full_rec_writer)
+                    self.full_rec_writer = None
+                    
+                    try:
+                        writer, filepath = self.video_recorder.start_full_recording(
+                            fps=self.intrusion_manager.fps,
+                            frame_size=(out_frame.shape[1], out_frame.shape[0])
+                        )
+                        self.full_rec_writer = writer
+                        self.full_rec_path = filepath
+                        self.full_rec_start_time = current_time
+                        logger.info(f"Started new split full recording: {filepath}")
+                    except Exception as e:
+                        logger.error(f"Failed to start split full recording: {e}")
+        else:
+            # No person detected in frame
+            if self.full_rec_writer is not None:
+                # Check if 5 seconds have passed since we last saw a person
+                if self.last_person_seen_time is None or (current_time - self.last_person_seen_time >= 5.0):
+                    logger.info("No person detected for 5 seconds. Stopping full recording.")
+                    self.video_recorder.stop_recording(self.full_rec_writer)
+                    self.full_rec_writer = None
+                    self.full_rec_start_time = None
+                # Check if recording exceeded 1 minute during this idle/grace period
+                elif current_time - self.full_rec_start_time >= 60.0:
+                    logger.info("Full recording reached 1 minute limit during idle grace period. Stopping recording.")
+                    self.video_recorder.stop_recording(self.full_rec_writer)
+                    self.full_rec_writer = None
+                    self.full_rec_start_time = None
+
+        # Write frame if actively recording
+        if self.full_rec_writer is not None:
+            try:
+                self.video_recorder.write_frame(self.full_rec_writer, out_frame)
+            except Exception as e:
+                logger.error(f"Failed to write frame to full recording: {e}")
 
         # Camera-wide loitering detection (independent of zones)
         for person in tracked_people:
