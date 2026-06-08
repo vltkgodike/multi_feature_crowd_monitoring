@@ -733,6 +733,26 @@ def update_line_crossing(
 # INITIALIZE DATABASE
 # =========================================
 
+def ensure_default_zones():
+    """Creates a default camera-wide zone with ID 0 in the database if it doesn't exist."""
+    global conn, cursor
+    try:
+        ensure_connection()
+        cursor.execute(
+            """
+            INSERT INTO zones (id, name, points, created_at)
+            VALUES (0, 'camera_wide', '[]'::jsonb, CURRENT_TIMESTAMP)
+            ON CONFLICT (id) DO NOTHING;
+            """
+        )
+        conn.commit()
+        print(" Camera-wide default zone (ID: 0) verified/created.")
+    except Exception as e:
+        print(" Failed to create camera-wide default zone (ID: 0):", e)
+        if conn:
+            conn.rollback()
+
+
 def init_db():
     """Initializes the database connection and creates all required tables if they don't exist."""
     if connect_db():
@@ -740,6 +760,7 @@ def init_db():
         create_intrusion_events_table()
         create_loitering_alerts_table()
         create_line_crossings_table()
+        ensure_default_zones()
         return True
     return False
 
