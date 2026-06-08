@@ -27,7 +27,8 @@ class DangerZoneMonitor:
         fps: float = 30.0,
         loitering_threshold: float = LOITERING_THRESHOLD_SEC,
         loitering_alert_cooldown: float = LOITERING_ALERT_COOLDOWN_SEC,
-        async_inference: bool = True
+        async_inference: bool = True,
+        camera_id: str = "camera_0",
     ):
         """Initializes the danger zone monitor.
         
@@ -41,6 +42,7 @@ class DangerZoneMonitor:
             loitering_threshold: Duration in seconds to trigger loitering alert.
             loitering_alert_cooldown: Cooldown between successive loitering alerts.
             async_inference: Run TensorRT inference in a worker thread for lower frame-loop latency.
+            camera_id: Identifier for the camera (used for output directory structure).
         """
         logger.info("Initializing DangerZoneMonitor package...")
         # Camera-wide loitering tracking
@@ -63,7 +65,8 @@ class DangerZoneMonitor:
         )
         self.video_recorder = VideoRecorder(
             recordings_dir=recordings_dir,
-            snapshots_dir=snapshots_dir
+            snapshots_dir=snapshots_dir,
+            camera_id=camera_id
         )
         self.csv_logger = CSVLogger(log_path="logs/danger_zone/intrusion_log.csv")
         self.loitering_csv_logger = CSVLogger(log_path="logs/loitering/loitering_log.csv")
@@ -121,12 +124,15 @@ class DangerZoneMonitor:
 
                 try:
                     event_id = self.video_recorder.get_next_event_id()
+                    person_bbox = tuple(map(int, person.bbox))
 
                     self.video_recorder.save_snapshot(
                         frame=out_frame,
                         event_id=event_id,
                         suffix=f"_person_{track_id}",
-                        subdir="loitering"
+                        subdir="loitering",
+                        track_id=track_id,
+                        bbox=person_bbox
                     )
 
                     writer, video_path = self.video_recorder.start_recording(

@@ -1,7 +1,6 @@
 from collections import deque
 from datetime import datetime
 import logging
-import os
 from typing import Dict, Tuple, List, Optional
 import cv2
 import numpy as np
@@ -44,6 +43,9 @@ class PersonZoneState:
         self.event_id: Optional[int] = None
         self.segment_index: int = 1
         self.segment_frame_count: int = 0
+        
+        # Last known bounding box for cropped person snapshots
+        self.last_bbox: Optional[Tuple[int, int, int, int]] = None
         
         # Loitering states
         self.is_loitering: bool = False
@@ -200,6 +202,7 @@ class IntrusionManager:
                 
                 state = self.active_states[key]
                 state.missing_frames = 0  # Reset missing frame count
+                state.last_bbox = tuple(map(int, person.bbox))  # Store bbox for cropped snapshots
                 
                 if not state.is_confirmed:
                     # Append copy of the frame to the pre-record buffer
@@ -227,8 +230,11 @@ class IntrusionManager:
                         
                         logger.info(f"Intrusion CONFIRMED for Person {state.track_id} in {state.zone_name}. Event ID: {state.event_id}")
                         
-                        # Save confirmation snapshot in danger_zone
-                        snapshot_path = self.video_recorder.save_snapshot(frame, state.event_id, subdir="danger_zone")
+                        # Save confirmation snapshot in danger_zone (full frame + cropped person)
+                        snapshot_path = self.video_recorder.save_snapshot(
+                            frame, state.event_id, subdir="danger_zone",
+                            track_id=state.track_id, bbox=state.last_bbox
+                        )
                         state.snapshot_path = snapshot_path
                         
                         # Start video recording
@@ -257,8 +263,14 @@ class IntrusionManager:
                         if state.last_loitering_alert_time is None or (current_time - state.last_loitering_alert_time).total_seconds() >= self.loitering_alert_cooldown:
                             state.last_loitering_alert_time = current_time
                             logger.warning(f"🚨 LOITERING ALERT: Person {state.track_id} loitering in {state.zone_name} for {int(state.duration)}s!")
-                            # Save loitering snapshot in loitering folder
-                            loiter_snapshot_path = self.video_recorder.save_snapshot(frame, state.event_id, suffix=f"_loiter_{int(state.duration)}s", subdir="loitering")
+                            # Save loitering snapshot in loitering folder (full frame + cropped person)
+                            loiter_snapshot_path = self.video_recorder.save_snapshot(
+                                frame, state.event_id,
+                                suffix=f"_loiter_{int(state.duration)}s",
+                                subdir="loitering",
+                                track_id=state.track_id,
+                                bbox=state.last_bbox
+                            )
                             try:
                                 import postgres_db
                                 alert_id = postgres_db.create_default_loitering_alert(
@@ -306,41 +318,8 @@ class IntrusionManager:
                 self.video_recorder.stop_recording(state.video_writer)
                 logger.info(f"Intrusion ended for Person {track_id} in Zone {state.zone_name}. Event ID: {state.event_id} (Duration: {state.duration:.2f}s)")
                 
-                # Relocate files to loitering directory if they loitered
+                # Log to the appropriate CSV based on event type
                 if state.is_loitering:
-                    # Move video path segments to loitering
-                    new_video_paths = []
-                    for video_path in state.video_paths:
-                        if os.path.exists(video_path):
-                            filename = os.path.basename(video_path)
-                            new_path = os.path.join(self.video_recorder.recordings_dir, "loitering", filename)
-                            if os.path.abspath(video_path) != os.path.abspath(new_path):
-                                try:
-                                    import shutil
-                                    shutil.move(video_path, new_path)
-                                    new_video_paths.append(new_path)
-                                except Exception as e:
-                                    logger.error(f"Failed to move video file {video_path} to loitering: {e}")
-                                    new_video_paths.append(video_path)
-                            else:
-                                new_video_paths.append(video_path)
-                        else:
-                            new_video_paths.append(video_path)
-                    state.video_paths = new_video_paths
-                    
-                    # Move snapshot to loitering
-                    if state.snapshot_path and os.path.exists(state.snapshot_path):
-                        filename = os.path.basename(state.snapshot_path)
-                        new_snapshot_path = os.path.join(self.video_recorder.snapshots_dir, "loitering", filename)
-                        if os.path.abspath(state.snapshot_path) != os.path.abspath(new_snapshot_path):
-                            try:
-                                import shutil
-                                shutil.move(state.snapshot_path, new_snapshot_path)
-                                state.snapshot_path = new_snapshot_path
-                            except Exception as e:
-                                logger.error(f"Failed to move snapshot {state.snapshot_path} to loitering: {e}")
-                                
-                    # Log event to loitering CSV log
                     self.loitering_csv_logger.log_event(
                          event_id=state.event_id,
                          person_id=track_id,
@@ -353,7 +332,6 @@ class IntrusionManager:
                          snapshot_path=state.snapshot_path
                     )
                 else:
-                    # Write entry to standard danger zone CSV log
                     self.csv_logger.log_event(
                          event_id=state.event_id,
                          person_id=track_id,

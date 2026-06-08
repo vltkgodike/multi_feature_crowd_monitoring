@@ -9,6 +9,7 @@ import time
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from danger_zone_monitor import DangerZoneMonitor
+from danger_zone_monitor.video_recorder import extract_camera_id
 
 logging.basicConfig(
     level=logging.INFO,
@@ -25,6 +26,7 @@ def run_monitor(
     retry_interval: int,
     async_inference: bool,
     display: bool,
+    camera_id: str = "camera_0",
 ):
     """Runs the danger zone monitor on an RTSP stream with robust auto-reconnection.
     
@@ -61,7 +63,8 @@ def run_monitor(
                 model_path=model_path,
                 zone_file=zone_file,
                 fps=fps,
-                async_inference=async_inference
+                async_inference=async_inference,
+                camera_id=camera_id
             )
         else:
             # Update target FPS in the existing intrusion manager in case camera properties changed
@@ -115,7 +118,11 @@ def main():
     parser.add_argument("--retry", type=int, default=5, help="Seconds to wait before reconnecting after a disconnect")
     parser.add_argument("--sync-inference", action="store_true", help="Disable threaded TensorRT inference")
     parser.add_argument("--display", action="store_true", help="Display the live video feed with overlays")
+    parser.add_argument("--camera-id", type=str, default=None, help="Camera identifier (auto-extracted from URL if not provided)")
     args = parser.parse_args()
+
+    # Resolve camera_id: user-provided > auto-extracted > fallback
+    camera_id = args.camera_id or extract_camera_id(args.url)
 
     run_monitor(
         rtsp_url=args.url,
@@ -124,7 +131,8 @@ def main():
         fallback_fps=args.fps,
         retry_interval=args.retry,
         async_inference=not args.sync_inference,
-        display=args.display
+        display=args.display,
+        camera_id=camera_id
     )
 
 if __name__ == "__main__":

@@ -9,6 +9,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from in_out.find_direction import SingleLineCounter
 from danger_zone_monitor import DangerZoneMonitor
 from danger_zone_monitor.tools.zone_drawer import ZoneDrawer
+from danger_zone_monitor.video_recorder import extract_camera_id
 
 # Configure standard logging to console
 logging.basicConfig(
@@ -28,6 +29,7 @@ def main():
     parser.add_argument("--loiter-cooldown", type=float, default=5.0, help="Loitering alert cooldown in seconds")
     parser.add_argument("--sync-inference", action="store_true", help="Disable threaded TensorRT inference")
     parser.add_argument("--display", action="store_true", help="Display the live video feed with overlays")
+    parser.add_argument("--camera-id", type=str, default=None, help="Camera identifier (auto-extracted from source if not provided)")
     args = parser.parse_args()
 
     # Determine source (integer for webcam, string for video file path)
@@ -51,6 +53,9 @@ def main():
         fps = args.fps
         logger.info(f"Could not detect stream FPS. Falling back to default: {fps:.2f}")
 
+    # Resolve camera_id: user-provided > auto-extracted > fallback
+    camera_id = args.camera_id or extract_camera_id(args.source)
+
     # Initialize DangerZoneMonitor
     monitor = DangerZoneMonitor(
         model_path=args.model,
@@ -58,7 +63,8 @@ def main():
         fps=fps,
         loitering_threshold=args.loiter_threshold,
         loitering_alert_cooldown=args.loiter_cooldown,
-        async_inference=not args.sync_inference
+        async_inference=not args.sync_inference,
+        camera_id=camera_id
     )
     counter = SingleLineCounter(
         json_file="line.json"

@@ -3,6 +3,7 @@ import os
 import sys
 import time
 import numpy as np
+import argparse
 from loit_detect import LoiteringDetector
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -10,15 +11,26 @@ if REPO_ROOT not in sys.path:
     sys.path.append(REPO_ROOT)
 
 from danger_zone_monitor.person_tracker import PersonTracker
+from danger_zone_monitor.video_recorder import VideoRecorder, extract_camera_id
 
 # ==========================================
 # CREATE OUTPUT FOLDERS
 # ==========================================
 
-os.makedirs("output/detections", exist_ok=True)
-os.makedirs("output/loitering", exist_ok=True)
-os.makedirs("output/videos", exist_ok=True)
 os.makedirs("output/logs", exist_ok=True)
+
+# ==========================================
+# CLI ARGUMENTS
+# ==========================================
+parser = argparse.ArgumentParser(description="Loitering Detection System")
+parser.add_argument("--source", type=str, default="0", help="Webcam index (e.g., 0) or path to video file")
+parser.add_argument("--camera-id", type=str, default=None, help="Camera identifier (auto-extracted from source if not provided)")
+parser.add_argument("--loiter-threshold", type=int, default=30, help="Loitering threshold in seconds")
+args = parser.parse_args()
+
+source = args.source
+if source.isdigit():
+    source = int(source)
 
 # ==========================================
 # SETUP LOGGING
@@ -84,8 +96,8 @@ log_message("[MODEL] Model loaded successfully")
 # VIDEO SOURCE - USB ARDUCAM
 # ==========================================
 
-log_message("[CAMERA] Initializing USB ArduCAM...")
-cap = cv2.VideoCapture(0)
+log_message(f"[CAMERA] Initializing camera source: {source}...")
+cap = cv2.VideoCapture(source)
 
 # ==========================================
 # SET USB CAMERA PROPERTIES
@@ -182,111 +194,43 @@ polygon_points = [
 log_message(f"[BOX] Loitering box coordinates: {polygon_points}")
 
 # ==========================================
-# SETUP VIDEO RECORDING
+# SETUP VIDEO RECORDING WITH VIDEORECORDER
 # ==========================================
 
-video_timestamp = time.strftime("%Y%m%d_%H%M%S")
+camera_id = args.camera_id or extract_camera_id(args.source)
+recordings_dir = os.path.join(REPO_ROOT, "recordings")
+snapshots_dir = os.path.join(REPO_ROOT, "snapshots")
 
-# Try multiple codecs for .mp4 compatibility - ordered by reliability on Windows
-codecs_to_try = [
-    ('MJPG', 'Motion JPEG', '.avi'),  # Most reliable on Windows
-    ('XVID', 'MPEG-4 Part 2', '.mp4'), # Good MP4 support
-    ('mp4v', 'MP4V', '.mp4'),          # Standard MP4 (often fails on Windows)
-    ('avc1', 'H.264/AVC1', '.mp4'),    # H.264 (often fails on Windows)
-    ('X264', 'X264', '.mp4'),          # X264 encoder
-]
+video_recorder = VideoRecorder(
+    recordings_dir=recordings_dir,
+    snapshots_dir=snapshots_dir,
+    camera_id=camera_id
+)
 
-video_writer = None
-selected_codec = None
-video_output_path = None
-
-print("[INFO] Initializing video writer...")
-log_message("[VIDEO] Attempting to initialize video writer with multiple codecs...")
-
-for codec_code, codec_name, ext in codecs_to_try:
-    try:
-        # Build the video path with proper extension
-        test_path = f"output/videos/detection_stream_{video_timestamp}{ext}"
-        
-        fourcc = cv2.VideoWriter_fourcc(*codec_code)
-        test_writer = cv2.VideoWriter(
-            test_path,
-            fourcc,
-            fps,
-            (frame_width, frame_height)
-        )
-        
-        if test_writer.isOpened():
-            # Test write a frame to verify codec actually works
-            test_frame = cv2.zeros((frame_height, frame_width, 3), dtype=np.uint8)
-            test_result = test_writer.write(test_frame)
-            test_writer.release()
-            
-            if test_result:  # Codec actually worked
-                video_writer = cv2.VideoWriter(
-                    test_path,
-                    fourcc,
-                    fps,
-                    (frame_width, frame_height)
-                )
-                video_output_path = test_path
-                selected_codec = codec_name
-                log_message(f"[VIDEO]  Codec verified: {codec_name} ({codec_code})")
-                print(f"[INFO] Using codec: {codec_name}")
-                break
-            else:
-                # isOpened() returned True but write() failed - skip this codec
-                test_writer.release()
-                import os as os_module
-                if os_module.path.exists(test_path):
-                    os_module.remove(test_path)
-                log_message(f"[VIDEO]  Codec failed during write test: {codec_name}")
-    except Exception as e:
-        log_message(f"[VIDEO]  Codec error: {codec_name} - {str(e)}")
-        pass
-
-# Fallback if all codecs fail
-if video_writer is None or not video_writer.isOpened():
-    log_message("[WARNING] All primary codecs failed, creating Motion JPEG fallback")
-    video_output_path = f"output/videos/detection_stream_{video_timestamp}.avi"
-    try:
-        fourcc = cv2.VideoWriter_fourcc(*'MJPG')
-        video_writer = cv2.VideoWriter(
-            video_output_path,
-            fourcc,
-            fps,
-            (frame_width, frame_height)
-        )
-        if video_writer.isOpened():
-            selected_codec = "MJPEG (Fallback)"
-            log_message(f"[VIDEO]  Fallback codec activated: {video_output_path}")
-        else:
-            log_message(f"[ERROR] Fallback codec also failed!")
-            video_writer = None
-    except Exception as e:
-        log_message(f"[ERROR] Failed to initialize fallback codec: {str(e)}")
-        video_writer = None
+log_message(f"[VIDEO] Initializing VideoRecorder for camera_id='{camera_id}'...")
+video_writer, video_output_path = video_recorder.start_recording(
+    event_id=0,
+    fps=fps,
+    frame_size=(frame_width, frame_height),
+    subdir="loitering"
+)
 
 if video_writer is not None and video_writer.isOpened():
-    log_message(f"[VIDEO] Recording to: {video_output_path}")
-    log_message(f"[VIDEO] Codec: {selected_codec} | FPS: {fps} | Resolution: {frame_width}x{frame_height}")
-    print(f"[INFO] Video recording started: {video_output_path}")
+    log_message(f"[VIDEO] Recording started: {video_output_path}")
 else:
-    log_message("[ERROR] Failed to initialize video writer with any codec!")
-    print("[ERROR] Video recording will NOT be saved")
-    video_writer = None
+    log_message("[ERROR] Failed to start video recording!")
 
 # ==========================================
-# LOITERING DETECTOR - TEST WITH 10 SECONDS
+# LOITERING DETECTOR INITIALIZATION
 # ==========================================
 
 loiter_detector = LoiteringDetector(
     polygon_points=polygon_points,
-    loitering_threshold=30,  # 30 seconds for testing (change to 60 for production)
+    loitering_threshold=args.loiter_threshold,
     alert_cooldown=2
 )
 
-log_message("[DETECTOR] Loitering detector initialized with 30 second threshold (TESTING MODE)")
+log_message(f"[DETECTOR] Loitering detector initialized with {args.loiter_threshold} second threshold")
 
 # ==========================================
 # TRACKING VARIABLES FOR SAVING
@@ -317,6 +261,7 @@ while True:
 
     frame_count += 1
     current_time = time.time()
+    clean_frame = frame.copy()
 
     # ======================================
     # YOLO TRACKING
@@ -394,14 +339,20 @@ while True:
                 last_detection_save[track_id] = 0
             
             if (current_time - last_detection_save[track_id]) > detection_interval:
-                timestamp = time.strftime("%Y%m%d_%H%M%S")
-                filename = f"output/detections/detection_ID{track_id}_{timestamp}.jpg"
-                cv2.imwrite(filename, frame)
+                # Save snapshot using unified VideoRecorder (full frame + cropped person)
+                saved_path = video_recorder.save_snapshot(
+                    frame=clean_frame,
+                    event_id=0,
+                    suffix=f"_detection",
+                    subdir="loitering",
+                    track_id=track_id,
+                    bbox=tuple(track["bbox"])
+                )
                 last_detection_save[track_id] = current_time
-                log_message(f"[SAVE] Detection saved - ID: {track_id}")
+                log_message(f"[SAVE] Detection snapshot saved to {saved_path} for Person ID {track_id}")
 
     # ======================================
-    # SAVE LOITERING ALERTS (10+ seconds for testing)
+    # SAVE LOITERING ALERTS
     # ======================================
 
     if alerts:
@@ -414,20 +365,21 @@ while True:
                 last_loitering_save[track_id] = 0
             
             if (current_time - last_loitering_save[track_id]) > loitering_interval:
-                timestamp = time.strftime("%Y%m%d_%H%M%S")
-                
-                # Save with dwell time in filename
-                filename = f"output/loitering/loitering_ID{track_id}_{dwell_time}s_{timestamp}.jpg"
-                
+                # Find bounding box for cropping
+                bbox = None
+                for t in tracks:
+                    if t["track_id"] == track_id:
+                        bbox = tuple(t["bbox"])
+                        break
+
                 # Draw alert info on frame before saving
-                alert_frame = frame.copy()
-                x1, y1, x2, y2 = 100, 100, 540, 200  # Example coordinates
-                
-                cv2.rectangle(alert_frame, (x1, y1), (x2, y2), (0, 0, 255), -1)
+                alert_frame = clean_frame.copy()
+                x1_alert, y1_alert, x2_alert, y2_alert = 100, 100, 540, 200
+                cv2.rectangle(alert_frame, (x1_alert, y1_alert), (x2_alert, y2_alert), (0, 0, 255), -1)
                 cv2.putText(
                     alert_frame,
-                    f"LOITERING ALERT!",
-                    (x1 + 20, y1 + 40),
+                    "LOITERING ALERT!",
+                    (x1_alert + 20, y1_alert + 40),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     1,
                     (0, 255, 255),
@@ -436,17 +388,25 @@ while True:
                 cv2.putText(
                     alert_frame,
                     f"Person ID: {track_id} | Duration: {dwell_time}s",
-                    (x1 + 20, y1 + 80),
+                    (x1_alert + 20, y1_alert + 80),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     0.7,
                     (0, 255, 255),
                     2
                 )
-                
-                cv2.imwrite(filename, alert_frame)
+
+                # Save snapshot using unified VideoRecorder (full frame + cropped person)
+                saved_path = video_recorder.save_snapshot(
+                    frame=alert_frame,
+                    event_id=0,
+                    suffix=f"_loiter_{dwell_time}s",
+                    subdir="loitering",
+                    track_id=track_id,
+                    bbox=bbox
+                )
+
                 last_loitering_save[track_id] = current_time
-                
-                log_message(f"[LOITER] 🚨 ALERT SAVED - ID: {track_id} | Duration: {dwell_time}s")
+                log_message(f"[LOITER] 🚨 ALERT SAVED - ID: {track_id} | Duration: {dwell_time}s (saved to {saved_path})")
                 print(f"[CONSOLE] 🚨🚨🚨 LOITERING DETECTED - Person {track_id} loitered for {dwell_time} seconds!")
 
 
@@ -463,14 +423,9 @@ while True:
     if len(frame.shape) != 3 or frame.shape[2] != 3:
         frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
     
-    # Write frame to video (with error handling)
-    if video_writer is not None and video_writer.isOpened():
-        try:
-            success = video_writer.write(frame)
-            if not success:
-                log_message(f"[WARNING] Frame write returned False - codec may have failed")
-        except Exception as e:
-            log_message(f"[ERROR] Failed to write frame: {str(e)}")
+    # Write frame to video
+    if video_writer is not None:
+        video_recorder.write_frame(video_writer, frame)
 
     # ======================================
     # DISPLAY
@@ -488,29 +443,14 @@ while True:
 # CLEANUP
 # ==========================================
 
-log_message("[CLEANUP] Closing video writer...")
+log_message("[CLEANUP] Closing video writer and resources...")
 model.close()
 cap.release()
 
-# Properly flush and release video writer
 if video_writer is not None:
     try:
-        # Force release to finalize the file
-        video_writer.release()
-        import time as time_module
-        time_module.sleep(1)  # Wait 1 second for file to be written
-        
-        # Check if file was created and has content
-        import os as os_module
-        if os_module.path.exists(video_output_path):
-            file_size = os_module.path.getsize(video_output_path)
-            if file_size > 0:
-                log_message(f"[VIDEO]  Video finalized successfully: {video_output_path}")
-                log_message(f"[VIDEO] File size: {file_size / (1024*1024):.2f} MB")
-            else:
-                log_message(f"[ERROR] Video file is empty (0 bytes): {video_output_path}")
-        else:
-            log_message(f"[ERROR] Video file was not created: {video_output_path}")
+        video_recorder.stop_recording(video_writer)
+        log_message(f"[VIDEO] Video finalized successfully: {video_output_path}")
     except Exception as e:
         log_message(f"[ERROR] Error finalizing video: {str(e)}")
 
@@ -518,13 +458,10 @@ cv2.destroyAllWindows()
 
 log_message(f"[SYSTEM] Total frames processed: {frame_count}")
 log_message(f"[SYSTEM] Total people detected: {len(tracked_people)}")
-log_message("[SYSTEM]  Detection stopped - all outputs saved to output/ folder")
-log_message("[SYSTEM]  Videos: output/videos/")
-log_message("[SYSTEM]  Detections: output/detections/")
-log_message("[SYSTEM]  Loitering alerts: output/loitering/")
-log_message("[SYSTEM]  Logs: output/logs/")
+log_message("[SYSTEM] Detection stopped - all outputs saved to hierarchical folders under recordings/ and snapshots/")
+log_message(f"[SYSTEM] Videos directory: {recordings_dir}")
+log_message(f"[SYSTEM] Snapshots directory: {snapshots_dir}")
 log_message("[SYSTEM] System shutdown complete")
 
-print("[SUCCESS]  Detection stopped successfully!")
+print("[SUCCESS] Detection stopped successfully!")
 print(f"[SUCCESS] Video file: {video_output_path}")
-print("[SUCCESS] All outputs saved to output/ folder")

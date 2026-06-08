@@ -151,19 +151,25 @@ class TestVideoRecorder(unittest.TestCase):
         shutil.rmtree(self.temp_dir)
 
     def test_get_next_event_id_scans_existing_outputs(self):
+        # Create directories first
+        os.makedirs(os.path.join(self.recordings_dir, "danger_zone"), exist_ok=True)
+        os.makedirs(os.path.join(self.snapshots_dir, "loitering"), exist_ok=True)
+        
         # Files now live inside subdirectories
         open(os.path.join(self.recordings_dir, "danger_zone", "event_0005.mp4"), "w").close()
         open(os.path.join(self.recordings_dir, "danger_zone", "event_0008_part_002.mp4"), "w").close()
         open(os.path.join(self.snapshots_dir, "loitering", "event_0007.jpg"), "w").close()
+        open(os.path.join(self.snapshots_dir, "loitering", "loitering_10_20260608_120000.jpg"), "w").close()
 
-        self.assertEqual(self.recorder.get_next_event_id(), 9)
+        self.assertEqual(self.recorder.get_next_event_id(), 11)
 
     def test_save_snapshot_with_suffix(self):
         frame = np.zeros((10, 10, 3), dtype=np.uint8)
         path = self.recorder.save_snapshot(frame, 42, suffix="_loiter_10s", subdir="loitering")
         self.assertTrue(os.path.exists(path))
-        self.assertTrue(path.endswith("event_0042_loiter_10s.jpg"))
+        self.assertTrue(path.endswith("_loiter_10s.jpg"))
         self.assertIn("loitering", path)
+        self.assertIn("full_frame", path)
 
 
 class TestBoTSORTLiteTracker(unittest.TestCase):
@@ -380,10 +386,10 @@ class TestIntrusionManager(unittest.TestCase):
         self.assertTrue(self.im.active_states[key].is_confirmed)
         self.assertTrue(self.im.active_states[key].is_loitering)
 
-        # Check that save_snapshot was called with subdir params
+        # Check that save_snapshot was called with subdir params, track_id and bbox
         self.mock_recorder.save_snapshot.assert_has_calls([
-            call(self.mock_frame, 1, subdir="danger_zone"),
-            call(self.mock_frame, 1, suffix="_loiter_4s", subdir="loitering")
+            call(self.mock_frame, 1, subdir="danger_zone", track_id=5, bbox=(2, 2, 8, 8)),
+            call(self.mock_frame, 1, suffix="_loiter_4s", subdir="loitering", track_id=5, bbox=(2, 2, 8, 8))
         ])
 
 
