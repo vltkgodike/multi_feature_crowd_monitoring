@@ -2,7 +2,7 @@
   "zones": [
     {
       "zone_id": 1,
-      "zone_name": "danger_zone",
+      "zone_name": "danger_zone1",
       "points": [
         [
           410,
