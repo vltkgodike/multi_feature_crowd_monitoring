@@ -81,7 +81,7 @@ def connect_db():
 
         if conn is not None and conn.closed == 0:
 
-            print("✅ Database already connected")
+            print(" Database already connected")
             return True
 
         conn = psycopg2.connect(
@@ -102,15 +102,15 @@ def connect_db():
             conn.commit()
         except Exception as tz_error:
             conn.rollback()
-            print(f"⚠️ Failed to set database timezone to {APP_TIMEZONE}: {tz_error}")
+            print(f" Failed to set database timezone to {APP_TIMEZONE}: {tz_error}")
 
-        print("✅ Connected to Supabase PostgreSQL")
+        print(" Connected to Supabase PostgreSQL")
 
         return True
 
     except Exception as e:
 
-        print("❌ Database connection failed")
+        print(" Database connection failed")
         print(e)
 
         conn = None
@@ -144,7 +144,7 @@ def ensure_connection():
 
     if not is_connected():
 
-        print("⚠️ Reconnecting database...")
+        print(" Reconnecting database...")
 
         return connect_db()
 
@@ -178,11 +178,11 @@ def create_zones_table():
 
         conn.commit()
 
-        print("✅ zones table created")
+        print(" zones table created")
 
     except Exception as e:
 
-        print("❌ zones table creation failed")
+        print(" zones table creation failed")
         print(e)
 
         conn.rollback()
@@ -227,11 +227,11 @@ def create_intrusion_events_table():
 
         conn.commit()
 
-        print("✅ intrusion_events table created")
+        print(" intrusion_events table created")
 
     except Exception as e:
 
-        print("❌ intrusion_events table creation failed")
+        print(" intrusion_events table creation failed")
         print(e)
 
         conn.rollback()
@@ -268,11 +268,11 @@ def create_loitering_alerts_table():
 
         conn.commit()
 
-        print("✅ loitering_alerts table created")
+        print(" loitering_alerts table created")
 
     except Exception as e:
 
-        print("❌ loitering_alerts table creation failed")
+        print(" loitering_alerts table creation failed")
         print(e)
 
         conn.rollback()
@@ -307,11 +307,11 @@ def create_line_crossings_table():
 
         conn.commit()
 
-        print("✅ line_crossings table created")
+        print(" line_crossings table created")
 
     except Exception as e:
 
-        print("❌ line_crossings table creation failed")
+        print(" line_crossings table creation failed")
         print(e)
 
         conn.rollback()
@@ -356,13 +356,13 @@ def create_default_zone():
 
         conn.commit()
 
-        print(f"✅ Default zone created ID: {result['id']}")
+        print(f" Default zone created ID: {result['id']}")
 
         return result["id"]
 
     except Exception as e:
 
-        print("❌ Default zone creation failed")
+        print(" Default zone creation failed")
         print(e)
 
         conn.rollback()
@@ -403,11 +403,11 @@ def update_zone(zone_id, name, points):
 
         conn.commit()
 
-        print(f"✅ Zone updated ID: {zone_id}")
+        print(f" Zone updated ID: {zone_id}")
 
     except Exception as e:
 
-        print("❌ Zone update failed")
+        print(" Zone update failed")
         print(e)
 
         conn.rollback()
@@ -453,13 +453,13 @@ def create_default_intrusion_event(zone_id=0, entry_time=None):
 
         conn.commit()
 
-        print(f"✅ Default intrusion event created ID: {result['event_id']}")
+        print(f" Default intrusion event created ID: {result['event_id']}")
 
         return result["event_id"]
 
     except Exception as e:
 
-        print("❌ Default intrusion event creation failed")
+        print(" Default intrusion event creation failed")
         print(e)
 
         conn.rollback()
@@ -519,11 +519,11 @@ def update_intrusion_event(
 
         conn.commit()
 
-        print(f"✅ Intrusion event updated ID: {event_id}")
+        print(f" Intrusion event updated ID: {event_id}")
 
     except Exception as e:
 
-        print("❌ Intrusion event update failed")
+        print(" Intrusion event update failed")
         print(e)
 
         conn.rollback()
@@ -564,13 +564,13 @@ def create_default_loitering_alert(event_id, alert_time=None):
 
         conn.commit()
 
-        print(f"✅ Default loitering alert created ID: {result['alert_id']}")
+        print(f" Default loitering alert created ID: {result['alert_id']}")
 
         return result["alert_id"]
 
     except Exception as e:
 
-        print("❌ Default loitering alert creation failed")
+        print(" Default loitering alert creation failed")
         print(e)
 
         conn.rollback()
@@ -621,11 +621,11 @@ def update_loitering_alert(
 
         conn.commit()
 
-        print(f"✅ Loitering alert updated ID: {alert_id}")
+        print(f" Default loitering alert updated ID: {alert_id}")
 
     except Exception as e:
 
-        print("❌ Loitering alert update failed")
+        print(" Default loitering alert update failed")
         print(e)
 
         conn.rollback()
@@ -665,13 +665,13 @@ def create_default_line_crossing(direction="IN", crossing_time=None):
 
         conn.commit()
 
-        print(f"✅ Default line crossing created ID: {result['crossing_id']}")
+        print(f" Default line crossing created ID: {result['crossing_id']}")
 
         return result["crossing_id"]
 
     except Exception as e:
 
-        print("❌ Default line crossing creation failed")
+        print(" Default line crossing creation failed")
         print(e)
 
         conn.rollback()
@@ -719,11 +719,11 @@ def update_line_crossing(
 
         conn.commit()
 
-        print(f"✅ Line crossing updated ID: {crossing_id}")
+        print(f" Default line crossing updated ID: {crossing_id}")
 
     except Exception as e:
 
-        print("❌ Line crossing update failed")
+        print(" Default line crossing update failed")
         print(e)
 
         conn.rollback()
@@ -782,10 +782,10 @@ def upsert_zone(zone_id, name, points):
                 )
             )
             conn.commit()
-            print(f"✅ Zone inserted ID: {zone_id}")
+            print(f" Zone inserted ID: {zone_id}")
 
     except Exception as e:
-        print(f"❌ Zone upsert failed for ID: {zone_id}")
+        print(f" Zone upsert failed for ID: {zone_id}")
         print(e)
         if conn:
             conn.rollback()
@@ -804,10 +804,10 @@ def delete_zone(zone_id):
 
         cursor.execute("DELETE FROM zones WHERE id = %s;", (zone_id,))
         conn.commit()
-        print(f"✅ Zone deleted from DB ID: {zone_id}")
+        print(f" Zone deleted from DB ID: {zone_id}")
 
     except Exception as e:
-        print(f"❌ Zone deletion failed for ID: {zone_id}")
+        print(f" Zone deletion failed for ID: {zone_id}")
         print(e)
         if conn:
             conn.rollback()
@@ -887,5 +887,5 @@ if __name__ == "__main__":
     if conn:
         conn.close()
 
-    print("✅ Database setup completed")
+    print(" Database setup completed")
 
