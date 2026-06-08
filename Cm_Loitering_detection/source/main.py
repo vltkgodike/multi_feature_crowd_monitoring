@@ -4,6 +4,7 @@ import sys
 import time
 import numpy as np
 import argparse
+from datetime import datetime
 from loit_detect import LoiteringDetector
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -12,6 +13,7 @@ if REPO_ROOT not in sys.path:
 
 from danger_zone_monitor.person_tracker import PersonTracker
 from danger_zone_monitor.video_recorder import VideoRecorder, extract_camera_id
+import postgres_db
 
 # ==========================================
 # CREATE OUTPUT FOLDERS
@@ -201,6 +203,13 @@ camera_id = args.camera_id or extract_camera_id(args.source)
 recordings_dir = os.path.join(REPO_ROOT, "recordings")
 snapshots_dir = os.path.join(REPO_ROOT, "snapshots")
 
+# Initialize database
+try:
+    postgres_db.init_db()
+    log_message("[DATABASE] Supabase PostgreSQL database tables initialized.")
+except Exception as e:
+    log_message(f"[DATABASE] [ERROR] Failed to initialize database: {e}")
+
 video_recorder = VideoRecorder(
     recordings_dir=recordings_dir,
     snapshots_dir=snapshots_dir,
@@ -241,6 +250,9 @@ last_loitering_save = {}
 detection_interval = 1  # Save detection every 1 second
 loitering_interval = 1  # Save loitering every 1 second
 tracked_people = {}  # Track all people seen
+person_event_ids = {}
+person_entry_times = {}
+previous_people_in_zone = set()
 
 # ==========================================
 # MAIN LOOP
@@ -292,6 +304,50 @@ while True:
         frame,
         tracks
     )
+
+    current_people_in_zone = set(loiter_detector.entry_times.keys())
+    
+    # Check for entries
+    for track_id in current_people_in_zone:
+        if track_id not in previous_people_in_zone:
+            entry_time = datetime.now()
+            person_entry_times[track_id] = entry_time
+            try:
+                db_event_id = postgres_db.create_default_intrusion_event(
+                    zone_id=1,
+                    entry_time=entry_time
+                )
+                if db_event_id is not None:
+                    person_event_ids[track_id] = db_event_id
+                    log_message(f"[DATABASE] Created intrusion event {db_event_id} for Person {track_id}")
+            except Exception as db_err:
+                log_message(f"[DATABASE] [ERROR] Failed to create intrusion event: {db_err}")
+                
+    # Check for exits
+    for track_id in list(previous_people_in_zone):
+        if track_id not in current_people_in_zone:
+            event_id = person_event_ids.pop(track_id, None)
+            entry_time = person_entry_times.pop(track_id, None)
+            if event_id is not None:
+                exit_time = datetime.now()
+                duration = (exit_time - entry_time).total_seconds() if entry_time else 0.0
+                is_loitering = track_id in last_loitering_save
+                try:
+                    postgres_db.update_intrusion_event(
+                        event_id=event_id,
+                        person_id=track_id,
+                        zone_id=1,
+                        duration_seconds=duration,
+                        video_path=video_output_path,
+                        snapshot_path="0",
+                        is_loitering=is_loitering,
+                        exit_time=exit_time
+                    )
+                    log_message(f"[DATABASE] Updated intrusion event {event_id} for Person {track_id} (duration: {duration:.2f}s, is_loitering: {is_loitering})")
+                except Exception as db_err:
+                    log_message(f"[DATABASE] [ERROR] Failed to update intrusion event {event_id}: {db_err}")
+                    
+    previous_people_in_zone = current_people_in_zone
 
     # ======================================
     # DISPLAY ZONE STATUS
@@ -396,14 +452,34 @@ while True:
                 )
 
                 # Save snapshot using unified VideoRecorder (full frame + cropped person)
+                event_id = person_event_ids.get(track_id, 0)
                 saved_path = video_recorder.save_snapshot(
                     frame=alert_frame,
-                    event_id=0,
+                    event_id=event_id,
                     suffix=f"_loiter_{dwell_time}s",
                     subdir="loitering",
                     track_id=track_id,
                     bbox=bbox
                 )
+
+                # Push loitering alert to database!
+                if event_id != 0:
+                    try:
+                        alert_id = postgres_db.create_default_loitering_alert(
+                            event_id=event_id,
+                            alert_time=datetime.now()
+                        )
+                        if alert_id is not None:
+                            postgres_db.update_loitering_alert(
+                                alert_id=alert_id,
+                                event_id=event_id,
+                                dwell_time_seconds=float(dwell_time),
+                                snapshot_path=saved_path,
+                                alert_time=datetime.now()
+                            )
+                            log_message(f"[DATABASE] Logged loitering alert for Person {track_id} (Dwell: {dwell_time}s)")
+                    except Exception as db_err:
+                        log_message(f"[DATABASE] [ERROR] Failed to log loitering alert in DB: {db_err}")
 
                 last_loitering_save[track_id] = current_time
                 log_message(f"[LOITER] 🚨 ALERT SAVED - ID: {track_id} | Duration: {dwell_time}s (saved to {saved_path})")

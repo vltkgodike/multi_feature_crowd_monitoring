@@ -49,6 +49,9 @@ class DangerZoneMonitor:
         self.person_first_seen = {}
         self.person_loiter_saved = set()
         self.person_loiter_recorders = {}
+        self.person_loiter_event_ids = {}
+        self.person_loiter_video_paths = {}
+        self.person_loiter_snapshot_paths = {}
         
         # 0. Initialize database connection and tables
         try:
@@ -124,16 +127,30 @@ class DangerZoneMonitor:
 
                 try:
                     event_id = self.video_recorder.get_next_event_id()
+                    # Try to create intrusion event in the database
+                    try:
+                        import postgres_db
+                        db_event_id = postgres_db.create_default_intrusion_event(
+                            zone_id=0,
+                            entry_time=datetime.fromtimestamp(self.person_first_seen[track_id])
+                        )
+                        if db_event_id is not None:
+                            event_id = db_event_id
+                    except Exception as db_err:
+                        logger.error(f"Failed to create database intrusion event: {db_err}")
+
+                    self.person_loiter_event_ids[track_id] = event_id
                     person_bbox = tuple(map(int, person.bbox))
 
-                    self.video_recorder.save_snapshot(
+                    snapshot_path = self.video_recorder.save_snapshot(
                         frame=out_frame,
                         event_id=event_id,
-                        suffix=f"_person_{track_id}",
+                        suffix=f"_loiter_ns",
                         subdir="loitering",
                         track_id=track_id,
                         bbox=person_bbox
                     )
+                    self.person_loiter_snapshot_paths[track_id] = snapshot_path
 
                     writer, video_path = self.video_recorder.start_recording(
                         event_id=event_id,
@@ -142,10 +159,29 @@ class DangerZoneMonitor:
                         subdir="loitering"
                     )
                     self.person_loiter_recorders[track_id] = writer
+                    self.person_loiter_video_paths[track_id] = [video_path]
 
                     logger.warning(
                         f"LOITERING DETECTED: ID={track_id} visible for {duration:.1f}s"
                     )
+
+                    # Log loitering alert to database
+                    try:
+                        import postgres_db
+                        alert_id = postgres_db.create_default_loitering_alert(
+                            event_id=event_id,
+                            alert_time=datetime.now()
+                        )
+                        if alert_id is not None:
+                            postgres_db.update_loitering_alert(
+                                alert_id=alert_id,
+                                event_id=event_id,
+                                dwell_time_seconds=duration,
+                                snapshot_path=snapshot_path,
+                                alert_time=datetime.now()
+                            )
+                    except Exception as db_err:
+                        logger.error(f"Failed to log loitering alert in database: {db_err}")
 
                     self.person_loiter_saved.add(track_id)
 
@@ -171,10 +207,43 @@ class DangerZoneMonitor:
 
         for track_id in list(self.person_first_seen.keys()):
             if track_id not in active_ids:
-                self.person_first_seen.pop(track_id, None)
+                entry_time = self.person_first_seen.pop(track_id, None)
+                was_saved = track_id in self.person_loiter_saved
                 self.person_loiter_saved.discard(track_id)
-                if track_id in self.person_loiter_recorders:
-                    self.video_recorder.stop_recording(self.person_loiter_recorders.pop(track_id))
+                
+                # Stop recording
+                writer = self.person_loiter_recorders.pop(track_id, None)
+                if writer is not None:
+                    try:
+                        self.video_recorder.stop_recording(writer)
+                    except Exception as e:
+                        logger.error(f"Error stopping loitering recording: {e}")
+                
+                # Finalize in database if it was a saved loitering event
+                if was_saved:
+                    event_id = self.person_loiter_event_ids.pop(track_id, None)
+                    video_paths = self.person_loiter_video_paths.pop(track_id, [])
+                    snapshot_path = self.person_loiter_snapshot_paths.pop(track_id, None)
+                    
+                    exit_time = datetime.now()
+                    duration = (exit_time - datetime.fromtimestamp(entry_time)).total_seconds() if entry_time else 0.0
+                    
+                    if event_id is not None:
+                        try:
+                            import postgres_db
+                            postgres_db.update_intrusion_event(
+                                event_id=event_id,
+                                person_id=track_id,
+                                zone_id=0,
+                                duration_seconds=duration,
+                                video_path=";".join(video_paths),
+                                snapshot_path=snapshot_path,
+                                is_loitering=True,
+                                exit_time=exit_time
+                            )
+                            logger.info(f"Finalized camera-wide loitering event {event_id} in database (duration: {duration:.2f}s).")
+                        except Exception as e:
+                            logger.error(f"Failed to finalize loitering event {event_id} in database: {e}")
 
         # 3. Draw monitored danger zones (filled polygons + borders)
         out_frame = self.zone_manager.draw_zones(out_frame, occupied_zones)
